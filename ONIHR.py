@@ -83,9 +83,16 @@ MESH=np.array((
         [1,2,3]
     ))
 ))
+DOT = np.array((np.array((5,5,5)),'moncul','thon','Arial',14))
+TXT = np.array((np.array((5,5,5)),
+               np.array((5,5,2)),
+               np.array((5,5,2)),
+               'tofu',np.nan))
 
+OBJECT_ARY = [6,TXT,np.nan,"ddddd",np.nan,0,-1,0,0]
+#OBJECT_ARY = [6,DOT,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [10,MESH,np.nan,"ddddd",np.nan,0,-1,0,0]
-OBJECT_ARY = [0,CIR,np.nan,"ddddd",np.nan,0,-1,0,0]
+#OBJECT_ARY = [0,CIR,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [13,PTC,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [1,NURBS,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [9,LINE,np.nan,"ddddd",np.nan,0,-1,0,0]
@@ -457,6 +464,17 @@ def D_LAYER_TABLE (RHN_DOC_Adrss):
     print('\033[95m' +"\nLAYER TABLE\n-----------"+ '\033[0m')
     [print(i[2] + " | index = "+ str(i[3])+"\nGUID = " +hex(int.from_bytes(i[0],byteorder='little')))   for i in LAYER_TABLE]
     return LAYER_TABLE
+def D_STYLEID (RHN_DOC_Adrss):
+    c,STYLEID = 0,[]
+    while True :
+        STYLEID.append(p.read_memory(RHN_DOC_Adrss+3056+c,ctypes.c_longlong()).value)
+        c=c+8
+        if STYLEID[-1] == 0 :
+            break
+    STYLEID= [STYLEID[:-1],[b''.join([bytes((p.read_memory(i+l,ctypes.c_longlong()))) for i in [64,72]]) for l in STYLEID[:-1]],[''.join([chr(p.read_memory(i+c*2, ctypes.c_short()).value) for c in range(0,p.read_memory(i-4,ctypes.c_long()).value)]) for i in [p.read_memory(i+136,ctypes.c_longlong()).value for i in STYLEID[:-1]]]]
+    print('\033[95m' +"\nSTYLE ID\n--------"+ '\033[0m')
+    [print("Style ID "+ str(STYLEID[2][i])+" = "+ str(i) + " at " + str(hex(STYLEID[0][i]))) for i in range(0,len(STYLEID[0]))]
+    return STYLEID
 def D_HATCH_PATTERN (RHN_DOC_Adrss):
     HATCH_PATTERN = p.read_memory(RHN_DOC_Adrss+12288,ctypes.c_longlong()).value
     HATCH_PATTERN = np.array((["".join([chr(e) for e in z.split(b'\x00\x00')[0]][::2]) for z in [p.dump_map(ctypes.c_byte(),[(h,h+80) for h in [p.read_memory(t+136,ctypes.c_longlong()).value for t in [p.read_memory(i*8+HATCH_PATTERN,ctypes.c_longlong()).value for i in range(0,p.read_memory(RHN_DOC_Adrss+12296,ctypes.c_long()).value)]]],bin_out=False)][0]]))
@@ -518,7 +536,24 @@ def D_CREATE_VISUAL_LIST(VISUAL_FLAG,pm) :
 def D_POINT_2_OBJ_POINT (Point,FLAG) :
     return b''.join([D_TO_BY(i) for i in [FLAG[14][0],0,Point[1].astype(float)]]),np.array((5)),np.array((5))
 def D_PTC_2_OBJ_PTC_CALL (PTC) :
-    return np.cumsum([17]+[i for i in [len(PTC[1][0])*3 if len(PTC[1][c]) !=0 else None for c in range(0,3)] if i is not None])
+    return np.cumsum([17]+[i for i in [len(PTC[1][0])*3 if len(PTC[1][c]) !=0 else None for c in range(0,3)] if i is not None])_
+def D_TXT_2_OBJ_TXT_CONT(Text) :
+    return 1
+def D_TXT_2_OBJ_TXT (Text,FLAG,STYLEID) :
+    PROC_D_TXT_2_OBJ_TXT_CONT=executor.submit(D_TXT_2_OBJ_TXT_CONT,Text)
+    if type(Text[4]) != bytes :
+        if np.nan(Text)[4] :
+            Text[4] = STYLEID[1][0]
+        else :
+            Text[4] = STYLEID[1][int(Text[4])]
+    Text_bytes,Text_bytes_count = D_OBJ_NAME(Text[3])
+    a = b''.join([D_TO_BY(i) for i in [FLAG[15][1],0,0,Text[4],Text[0],1,np.zeros((3)),Text[1],Text[2],np.cross(Text[1:3]),1,0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',0,0,D_ARRAY_COUNT_MULTI([8,2]),np.zeros((9))]])
+    a = a + b''.join([D_TO_BY(i) for i in [FLAG[15][2],0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',np.zeros((3)),b'\x00\x00\x00\x03\x00\x00\x00\x00',FLAG[15][3],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',D_ARRAY_COUNT_MULTI([4,1]),np.zeros((13)),FLAG[15][4]]])
+    a = a + b''.join([D_TO_BY(i) for i in [D_ARRAY_COUNT(len(Text[3])),Text_bytes]])
+    a = a + b''.join([D_TO_BY(i) for i in [b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0', np.zeros(4)]])
+    a = a + b''.join([D_TO_BY(i) for i in [FLAG[15][5],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',FLAG[15][6],np.zeros((26))]])
+    COUNT = PROC_D_TXT_2_OBJ_TXT_CONT.result()
+    return a,COUNT,COUNT[-1]
 def D_PTC_2_OBJ_PTC (PTC,FLAG) :
     for i in range (1,2) :
         if  len(PTC[1][i]) != len(PTC[1][0]) :
@@ -551,13 +586,17 @@ def D_MESH_2_OBJ_MESH (MESH,FLAG) :
     a = a + b''.join([D_TO_BY(i) for i in [FLAG[10][13],0,0,FLAG[10][14],np.zeros(4),b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',FLAG[10][15],0,0,FLAG[10][16],0,0,FLAG[10][17],0,0,FLAG[10][18],np.zeros((8))]])
     a = a + b''.join([D_TO_BY(i) for i in [MESH_DOMAIN,b''.join([bytes(ctypes.c_float(i)) for i in [1,1,1,-1,-1,-1,-1,-1,0,0]])]])+b''.join(([b'\xd2\x1d3\x9e\xbd\xf8\xe5\xff']*6+[b'\xda9\xa3\xee^kK\r2U\xbf\xef\x95`\x18\x90\xaf\xd8\x07\t\x00\x00\x00\x00'])*8) + D_TO_BY(np.zeros((24)).astype(int))
     a = a + b''.join([b''.join([D_TO_BY(i.astype(float)) for i in c]) for c in MESH[0]])
-    
     a = a + b''.join([b''.join([bytes(ctypes.c_float(i)) for i in c]) for c in MESH[0]]) + (b'' if len(MESH[0])*3%2 == 0 else b'\x00\x00\x00\x00')
     a = a + b''.join([b''.join([D_ARRAY_COUNT_MULTI(i) for i in np.array((c+[c[-1]])).reshape(2,2).tolist()]) for c in MESH[1].astype(int).tolist()])
     a = a + VECT_VEX_BYTES + VECT_FACE_BYTES
     #a = a + b''.join([D_ARRAY_COUNT_MULTI(i) for i in (MESH[1].reshape(-1,2).astype(int).tolist() if np.size(MESH[1])%2 == 1 else np.concatenate((MESH[1].flatten(),np.zeros(0))).reshape(-1,2).astype(int).tolist())])
     CONT_MESH,SIZE = PROC_D_CONT_MESH.result()
     return a,CONT_MESH,SIZE
+def D_DOT_2_OBJ_DOT (Dot,FLAG) :
+    NAME,NAME_LIST = [t for u in [D_OBJ_NAME(i) for i in Dot[1:4][Dot[1:4]==Dot[1:4]].tolist()] for t in u],[[],[]]
+    [NAME_LIST[i%2].append(NAME[i]) for i in range(0,len(NAME))]
+    CALL = np.cumsum((np.insert((np.array((NAME_LIST[1]))/8+3),0,13)))+ np.append(np.ones_like(NAME_LIST[1])*0.5,1)
+    return b''.join([D_TO_BY(i) for i in [FLAG[6][1],0, Dot[0].astype(float), b''.join([b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0']*np.sum([Dot[1:4]==Dot[1:4]])),(b'\x00\x00\x00\x00'+bytes(ctypes.c_long(Dot[4]))),0,b''.join([D_TO_BY(12541225726029856768)+D_TO_BY(15200324352)+D_ARRAY_COUNT(int(len(i)/4))+i for i in NAME_LIST[0]])]]),CALL,CALL[-1]
 def D_LINE_2_OBJ_LINE (Line,FLAG) :
     D_PRINT_FROM(b''.join([D_TO_BY(i) for i in [FLAG[9][1],0,0,Line[0][:3].astype(float),Line[0][3:].astype(float),D_CUM_DOM(Line[0][::-1]).astype(float),0]]))
     return b''.join([D_TO_BY(i) for i in [FLAG[9][1],0,0,Line[0][:3].astype(float),Line[0][3:].astype(float),D_CUM_DOM(Line[0])[::-1].astype(float),3,0]]),np.array((13)),np.array((13))
@@ -756,7 +795,7 @@ def D_BREP_ALL_SPLIT_CRV (all_crv,a) :
     return np.array(([i for j in all_crv_split for i in j])),all_crv_split,ALL_SPLIT_CRV_CONT_SPLIT
 #||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||INPUT
 OBJECT_LIST_FLAG_IPT=["CIR","CRV","DIA","DIL","DIO","DIR","DOT","HAT","LED","LIN","MSH","PLI","PLS","PTC","PTS","SUB","TEX"]
-OBJECT_LIST_OFFSET_ATTRIBUT=[9,9,9,9,9,9,9,9,9,9,9,9,9,6,9,9,9]
+OBJECT_LIST_OFFSET_ATTRIBUT=[9,9,9,9,9,9,6,9,9,9,9,9,9,6,9,9,9]
 SAVE_FLAG = True
 ASK_LOAD = True
 REALOAD_FLAG = True
@@ -793,6 +832,8 @@ def D_OBJ_ATTRIBUT (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Ad
         NUM_LINE = PROC_D_CONT_OBJ_LINE.result()
         if OBJECT_ARY_S[i][0] == 14 : 
             DOMAINE =np.tile(OBJECT_ARY_S[i][1],2).astype(float)
+        elif OBJECT_ARY_S[i][0] ==6 :
+            DOMAINE =np.tile(OBJECT_ARY_S[i][1][0],2).astype(float)
         elif OBJECT_ARY_S[i][0] ==12 :
             DOMAINE = (np.sort(np.array(([j for i in  [[j for i in  [k[:math.floor(len(k))] for k in t] for j in i] for t in (OBJECT_ARY_S[i][1][0]).tolist()] for j in i])).reshape(-1,3),axis=0)[[0,-1]]).astype(float) 
         elif OBJECT_ARY_S[i][0] ==0 :
@@ -809,7 +850,7 @@ def D_OBJ_ATTRIBUT (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Ad
     NAME_BYTES_LIST = [k for l in [[NAME_BYTES_LIST[0][i],NAME_BYTES_LIST[1][i]] for i in range(0,len(NAME_BYTES_LIST[0]))] for k in l]
     CONT_FLAG_ATTRIBUT = np.array(D_CONT_FLAG_ATTRIBUT(OBJECT_ARY_S,SIZE)).flatten()
     return OBJ_ATTRIBUT,CONT_FLAG_ATTRIBUT,int(len(OBJ_ATTRIBUT)/8),GUID_LIST_ADD,NAME_BYTES_LIST
-def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE) :
+def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID) :
     if i[0] == 9 :
         return D_LINE_2_OBJ_LINE (i[1],FLAG)
     elif i[0] == 10:
@@ -818,19 +859,23 @@ def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE) :
         return D_CIRCLE_2_OBJ_CIRCLE (i[1],FLAG)
     elif i[0] == 1 :
         return D_NURBS_2_OBJ_NURBS (FLAG,i[1])
+    elif i[0] == 6 :
+        return D_DOT_2_OBJ_DOT (i[1],FLAG)
     elif i[0] ==12 :
         return D_BREP_2_OBJ_BREP (i[1],FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE)
     elif i[0] ==13 :
         return D_PTC_2_OBJ_PTC (i,FLAG)
     elif i[0] == 14 :
         return D_POINT_2_OBJ_POINT (i[1],FLAG,S_SIZE)
+    elif i[0] == 16 :
+        return D_TXT_2_OBJ_TXT (i[1],FLAG,STYLEID)
 
-def D_OBJ_TO_BYTES (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss, GUID_LIST_ADRSS,OBJECT_LIST_OFFSET_ATTRIBUT) :
+def D_OBJ_TO_BYTES (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss, GUID_LIST_ADRSS,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID) :
     CALL_POST,S_SIZE =[],0
     PROC_D_OBJ_ATTRIBUT = executor.submit(D_OBJ_ATTRIBUT,OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Adrss,OBJECT_LIST_OFFSET_ATTRIBUT)
     OBJ_GEO_BYTES,SIZE,CONT_FLAG,o = b'',0,[],0
     for i in OBJECT_ARY_S :
-        locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o)] = executor.submit(D_OBJ_TO_BYTES_SPEED,i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE)
+        locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o)] = executor.submit(D_OBJ_TO_BYTES_SPEED,i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID)
         o+=1
     for i in range (0,o) :
         OBJECT,FLAG_OBJ,SIZE_FLAG = locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o-1)].result()
@@ -924,5 +969,6 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
         LINE_TYPE= D_LINE_TYPE(RHN_DOC_Adrss)
         LAYER_TABLE = D_LAYER_TABLE(RHN_DOC_Adrss)
         HATCH_PATTERN = D_HATCH_PATTERN(RHN_DOC_Adrss)
+        STYLEID = D_STYLEID(RHN_DOC_Adrss)
         OBJECT_ARY_S = [OBJECT_ARY]
-        BYTES  = D_OBJ_TO_BYTES(OBJECT_ARY_S, RHN_OBJ_Adrss,p,OBJECT_LIST_FLAG_BYTES,ATTRIBUT_FLAG_BYTES,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss,GUID_LIST,OBJECT_LIST_OFFSET_ATTRIBUT)
+        BYTES  = D_OBJ_TO_BYTES(OBJECT_ARY_S, RHN_OBJ_Adrss,p,OBJECT_LIST_FLAG_BYTES,ATTRIBUT_FLAG_BYTES,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss,GUID_LIST,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID)
