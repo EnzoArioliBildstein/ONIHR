@@ -18,6 +18,7 @@ from enum import Flag
 from itertools import count
 from turtle import shape
 import uuid
+import struct
 from http.client import FOUND
 from pickle import FALSE
 from sre_parse import FLAGS
@@ -34,6 +35,7 @@ import os
 import math
 import concurrent.futures
 import psutil
+from fontmeta import FontMeta
 import math
 import warnings
 import pymem
@@ -85,11 +87,15 @@ MESH=np.array((
 ))
 DOT = np.array((np.array((5,5,5)),'moncul','thon','Arial',14))
 TXT = np.array((np.array((5,5,5)),
-               np.array((5,5,2)),
-               np.array((5,5,2)),
-               'tofu',np.nan))
+               np.array((1,0,0)),
+               np.array((0,1,0)),
+               'tofu',
+               np.nan,
+               np.nan,
+               np.nan,
+               5))
 
-OBJECT_ARY = [6,TXT,np.nan,"ddddd",np.nan,0,-1,0,0]
+OBJECT_ARY = [16,TXT,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [6,DOT,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [10,MESH,np.nan,"ddddd",np.nan,0,-1,0,0]
 #OBJECT_ARY = [0,CIR,np.nan,"ddddd",np.nan,0,-1,0,0]
@@ -180,6 +186,21 @@ def D_rotation_matrix_from_vectors(vec1,vec2):
     kmat=np.array([[0,-v[2],v[1]],[v[2],0,-v[0]],[-v[1],v[0],0]])
     rotation_matrix=np.eye(3)+kmat+kmat.dot(kmat) * ((1 - c) / (s ** 2))
     return rotation_matrix
+def D_LIST_TYPO (PRINT) :
+    Fonts=[]
+    a=os.listdir("C:\\Windows\\Fonts")
+    for i in a :
+        try:
+            meta_instance = FontMeta("C:\\Windows\\Fonts\\"+i)
+            Font_meta=meta_instance.get_full_data()
+            Fonts.append([Font_meta[l]["value"] for l in [6,1,2,1]])
+        except :
+            None
+    Fonts=np.array((Fonts)).T
+    if PRINT :
+        print('\033[95m' +"\nFont found :\n-----------------"+ '\033[0m')
+        [print(i) for i in Fonts[1]]
+    return Fonts
 #||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||FONCTION GESTION
 def D_OFFSET_HEX (Adrss, Offset) :
     if type(Adrss) == int :
@@ -465,16 +486,103 @@ def D_LAYER_TABLE (RHN_DOC_Adrss):
     [print(i[2] + " | index = "+ str(i[3])+"\nGUID = " +hex(int.from_bytes(i[0],byteorder='little')))   for i in LAYER_TABLE]
     return LAYER_TABLE
 def D_STYLEID (RHN_DOC_Adrss):
-    c,STYLEID = 0,[]
-    while True :
-        STYLEID.append(p.read_memory(RHN_DOC_Adrss+3056+c,ctypes.c_longlong()).value)
-        c=c+8
-        if STYLEID[-1] == 0 :
-            break
-    STYLEID= [STYLEID[:-1],[b''.join([bytes((p.read_memory(i+l,ctypes.c_longlong()))) for i in [64,72]]) for l in STYLEID[:-1]],[''.join([chr(p.read_memory(i+c*2, ctypes.c_short()).value) for c in range(0,p.read_memory(i-4,ctypes.c_long()).value)]) for i in [p.read_memory(i+136,ctypes.c_longlong()).value for i in STYLEID[:-1]]]]
+    RHN_STYLE_Adrss = p.read_memory(RHN_DOC_Adrss+2960,ctypes.c_longlong()).value
+    STYLEID = [p.read_memory(RHN_STYLE_Adrss+c*8,ctypes.c_longlong()).value for c in range(0,p.read_memory(RHN_DOC_Adrss+2968,ctypes.c_long()).value)]
+    STYLEID= [STYLEID,[b''.join([bytes((p.read_memory(i+l,ctypes.c_longlong()))) for i in [64,72]]) for l in STYLEID],[''.join([chr(p.read_memory(i+c*2, ctypes.c_short()).value) for c in range(0,p.read_memory(i-4,ctypes.c_long()).value)]) for i in [p.read_memory(i+136,ctypes.c_longlong()).value for i in STYLEID]]]
+    PROC_D_STYLE_DUMP = executor.submit(D_STYLE_DUMP,STYLEID)
+    D_DEFAUT_FONT = b''.join([bytes(p.read_memory(STYLEID[0][0]+463+i,ctypes.c_longlong())) for i in range(0,64,8)])
     print('\033[95m' +"\nSTYLE ID\n--------"+ '\033[0m')
     [print("Style ID "+ str(STYLEID[2][i])+" = "+ str(i) + " at " + str(hex(STYLEID[0][i]))) for i in range(0,len(STYLEID[0]))]
-    return STYLEID
+    print("Defaut Font at = "+ str(hex(STYLEID[0][0]+463)))
+    STYLEID.append(PROC_D_STYLE_DUMP.result())
+    return STYLEID, D_DEFAUT_FONT,STYLEID[0][0]+463
+def D_STYLE_DUMP (STYLEID) :
+    DUMPS_BYTES = [p.dump_map(ctypes.c_longlong(),[(i,i+1152)],bin_out=False)[0] for i in STYLEID[0]]
+    DUMPS_BYTES = [[(c[i:i+8]) for i in range(0,len(c),8)] for c in DUMPS_BYTES]
+    return DUMPS_BYTES
+def D_DUP_MOD_STYLE_DUMP (STYLEID,FROM_STYLE_NAME,DIM_STYLE_CHANGE) :
+    DIM_STYLE,DUMP = D_PRINT_DIM_STYLE_FROM (STYLEID,FROM_STYLE_NAME) 
+    if bool(DUMP) :
+        DIM_STYLE_CHANGE=[25,"Verdana",0.25,"f5f6f8",1,1,2,2,2,3]
+        Change,Order_Change=[],[25,36,24,80,119,115,136,66]
+        for i in range(0,len(Order_Change)) :
+            try : 
+                if i==0 :
+                    Change.append(D_NP_TO_BY(np.array((DIM_STYLE_CHANGE[0]))))
+                elif i==1 :
+                    Change.append(DIM_STYLE_CHANGE[1])
+                elif i==2 :
+                    Change.append(D_NP_TO_BY(np.array((DIM_STYLE_CHANGE[2]))))
+                elif i==3:
+                    Change.append((DUMP[80][0:1]+bytes(ctypes.c_longlong(int(DIM_STYLE_CHANGE[3],16)))[:3]+DUMP[80][4:5]+[b'\x00\x00\x00',b'\x00\x00\x01',b'\x01\x00\x01'][DIM_STYLE_CHANGE[4]]))
+                elif i==4 :
+                    Change.append(DUMP[119][0:7]+[b'\x00',b'\x01'][DIM_STYLE_CHANGE[5]])
+                elif i==5 :
+                    Change.append((DUMP[115][:6]+[b'\x00',b'\x00',b'\x00'][DIM_STYLE_CHANGE[6]]+[b'\x01',b'\x03',b'\x05'][DIM_STYLE_CHANGE[7]]))
+                    D_PRINT_FROM((DUMP[115][:6]+[b'\x00',b'\x00',b'\x00'][DIM_STYLE_CHANGE[6]]+[b'\x01',b'\x03',b'\x05'][DIM_STYLE_CHANGE[7]]))
+                elif i==6 :
+                    Change.append(DUMP[136][0:6]+[b'\x00',b'\x01',b'\x02',b'\x04',b'\x05'][DIM_STYLE_CHANGE[9]]+DUMP[136][7:])
+                elif i==7 :
+                    Change.append(DUMP[66][0:5]+[b'\x00',b'\x01',b'\x02',b'\x04',b'\x05'][DIM_STYLE_CHANGE[9]]+DUMP[66][6:])
+            except :
+                Change.append(nan)
+        for i in range(0,len(Order_Change)) :
+            if Change[i] == Change[i] :
+                if i==1 :
+                    Typo =  D_CHANGE_TYPO(Change[i])
+                    if Typo[0] == Typo[0] :
+                        DUMP=DUMP+[Typo[1]]
+                        for c in range(-1,8) :
+                            DUMP[Order_Change[i]+c]=b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0'
+                else :
+                    DUMP[Order_Change[i]]=Change[i][::-1]
+        D_PRINT_FROM(b''.join(DUMP))
+        return DUMP,Typo[0]
+    else :
+        return np.nan(),np.nan()
+def D_CHANGE_TYPO (Typo):
+    List_typo=D_LIST_TYPO(False)
+    Find =np.where(List_typo[0:2]==Typo)
+    if np.size(Find) :
+        Value = [[(D_ARRAY_COUNT_MULTI([i[2],i[2]])+i[0][4:]+b'\x00\x00\x00\x00')*2,[i[1]/8+1]*2] for i in [list(D_OBJ_NAME(i))+[len(i)] for i in List_typo[:,Find[1][0]]]]
+        return [145.5,3]+[c for l in [i[1] for i in Value] for c in l],b'\x00\x00\x00\x07\x00\x00\x00\x07\x00\x00\x00\x00F\x00r\x00-\x00F\x00r\x00\x00\x00\x00\x00\x00\x00' +b''.join([i[0] for i in Value])+b'\x00\x00\x00\x00'
+    else :
+        print("Typo no found")
+        return nan ,nan
+def D_PRINT_DIM_STYLE_SPEED_01 (DUMP) :
+    return ['None (0)','Background (1)','Solid Color (2)'][np.sum([int(DUMP[80][::-1].hex()[i]) for i in [13,15]])] +' #'+ DUMP[80][::-1].hex()[2:8][::-1]
+def D_PRINT_DIM_STYLE_SPEED_02 (DUMP) :
+    return ["Top","Middle","Bottom"][int((int(DUMP[115][::-1].hex()[15])-1)/2)] , ["Left","Middle","Right"][(int(DUMP[115][::-1].hex()[13]))]
+def D_PRINT_DIM_STYLE_SPEED_03 (DUMP) :
+    return ["Auto","Inside","Right","Left","H Right","H Left"][int(DUMP[66][::-1].hex()[9])]
+def D_PRINT_DIM_STYLE (DUMP) :
+    PROC_D_PRINT_DIM_STYLE_SPEED_01 = executor.submit(D_PRINT_DIM_STYLE_SPEED_01,DUMP)
+    PROC_D_PRINT_DIM_STYLE_SPEED_02 = executor.submit(D_PRINT_DIM_STYLE_SPEED_02,DUMP)
+    PROC_D_PRINT_DIM_STYLE_SPEED_03 = executor.submit(D_PRINT_DIM_STYLE_SPEED_03,DUMP)
+    Font = ''.join([chr(p.read_memory(int(DUMP[36][::-1].hex(),16)+i*2,ctypes.c_byte()).value) for i in range(0,p.read_memory(int(DUMP[36][::-1].hex(),16)-8,ctypes.c_long()).value)])
+    Font_Size,Text_gap=[struct.unpack('d',(DUMP[i] )) for i in [25,24]]
+    Text_bkg = PROC_D_PRINT_DIM_STYLE_SPEED_01.result()
+    Alig_v,Alig_h = PROC_D_PRINT_DIM_STYLE_SPEED_02.result()
+    Jutf = PROC_D_PRINT_DIM_STYLE_SPEED_03.result()
+    DIM_STYLE = []
+    for i in [["Font Size",Font_Size[0]],["Font",Font],["Text gap",Text_gap[0]],["Text Background",Text_bkg],["Text Frame",bool(int(DUMP[80][::-1].hex()[11]))],["Oriant Text",bool(int(DUMP[119][::-1].hex()[15]))],["Alignement V",Alig_v],["Alignement h",Alig_h],["Horizontal to view",bool(int(DUMP[136][::-1].hex()[13]))],["Justification",Jutf]] :
+        print(i[0] + " = " + str(i[1]))
+        DIM_STYLE.append(i[1])
+    return DIM_STYLE
+def D_PRINT_DIM_STYLE_FROM (STYLEID,FROM_STYLE_NAME) :
+    if type(FROM_STYLE_NAME) == int :
+        From = FROM_STYLE_NAME
+    else : 
+        From = STYLEID[2].index(FROM_STYLE_NAME)
+    if From != -1 and From < len(STYLEID[0]) :
+        print('\033[95m' +"\nFrom Style Info\n---------------"+ '\033[0m')
+        print("Name = "+FROM_STYLE_NAME)
+        From = STYLEID[3][From]
+        DIM_STYLE = D_PRINT_DIM_STYLE(From)
+        return DIM_STYLE,From
+    else :
+        print(FROM_STYLE_NAME + " no find")
+        return nan,False
 def D_HATCH_PATTERN (RHN_DOC_Adrss):
     HATCH_PATTERN = p.read_memory(RHN_DOC_Adrss+12288,ctypes.c_longlong()).value
     HATCH_PATTERN = np.array((["".join([chr(e) for e in z.split(b'\x00\x00')[0]][::2]) for z in [p.dump_map(ctypes.c_byte(),[(h,h+80) for h in [p.read_memory(t+136,ctypes.c_longlong()).value for t in [p.read_memory(i*8+HATCH_PATTERN,ctypes.c_longlong()).value for i in range(0,p.read_memory(RHN_DOC_Adrss+12296,ctypes.c_long()).value)]]],bin_out=False)][0]]))
@@ -490,7 +598,7 @@ def D_CLEAN_OBJ (OBJECT_ARY) :
     return OBJECT_ARY
 def D_FLAG_OBJ (ON_TXT_RH_TXT,ON_RD_RH_RD,ON_DT_RH_DT,RHN_DOC_Adrss,REALOAD_FLAG,OBJ_LIST_Adrss) :
     RD_TXT_DT_ON_RH = ON_TXT_RH_TXT + ON_RD_RH_RD + ON_DT_RH_DT
-    OBJ_TYPE = np.array((["CIR",[[0]]],["CRV",[[0]]],["DIA",[[0],[184,0],[184,56],[184,208]]],["DIL",[[0],[184,0],[184,56],[184,208],[192,440],[192,1096]]],["DIO",[[0],[184,0],[184,56],[184,208]]],["DIR",[[0],[184,0],[184,56],[184,208]]],["DOT",[[0]]],["HAT",[[0],[176],[184,0,8,0]]],["LED",[[0],[184,0],[184,56],[184,208]]],["LIN",[[0]]],["MSH",[[0],[16],[40],[64],[88],[112],[304],[328],[504],[528],[552],[664],[840],[864],[912],[936],[960],[984]]],["PLI",[[0],[24],[48]]],["PLS",[[0],[24],[32,0,0],[48],[56,0,0],[72],[80,0,0],[80,8,0],[80,8,0],[96],[104,0],[104,56],[104,88],[120],[128,0],[128,24,0],[128,104,0],[144],[152,0],[152,24,0],[152,136],[168],[176,0],[176,32],[192],[200,0],[200,24,0],[200,56]]],["PTC",[[0],[16],[40],[64],[88],[112]]],["PTS",[[0]]],["SUB",[[0]]],["TEX",[[0],[184,0],[184,56],[184,208]]]))
+    OBJ_TYPE = np.array((["CIR",[[0]]],["CRV",[[0]]],["DIA",[[0],[184,0],[184,56],[184,208]]],["DIL",[[0],[184,0],[184,56],[184,208],[192,440],[192,1096]]],["DIO",[[0],[184,0],[184,56],[184,208]]],["DIR",[[0],[184,0],[184,56],[184,208]]],["DOT",[[0]]],["HAT",[[0],[176],[184,0,8,0]]],["LED",[[0],[184,0],[184,56],[184,208]]],["LIN",[[0]]],["MSH",[[0],[16],[40],[64],[88],[112],[304],[328],[504],[528],[552],[664],[840],[864],[912],[936],[960],[984]]],["PLI",[[0],[24],[48]]],["PLS",[[0],[24],[32,0,0],[48],[56,0,0],[72],[80,0,0],[80,8,0],[80,8,0],[96],[104,0],[104,56],[104,88],[120],[128,0],[128,24,0],[128,104,0],[144],[152,0],[152,24,0],[152,136],[168],[176,0],[176,32],[192],[200,0],[200,24,0],[200,56]]],["PTC",[[0],[16],[40],[64],[88],[112]]],["PTS",[[0]]],["SUB",[[0]]],["TEX",[[0],[184,0],[184,56],[184,208],[184,64,0,0],[184,64,0,24]]]))
     if os.path.exists(os.path.expandvars(r'%TEMP%')+"\\onihr\\"+hex(uuid.getnode())+".npy") and REALOAD_FLAG == False :
         FLAG_GEO_VALUE = np.load(os.path.expandvars(r'%TEMP%')+"\\onihr\\"+hex(uuid.getnode())+".npy",allow_pickle=True)
     else :
@@ -521,6 +629,7 @@ def D_FLAG_OBJ (ON_TXT_RH_TXT,ON_RD_RH_RD,ON_DT_RH_DT,RHN_DOC_Adrss,REALOAD_FLAG
                 np.save((os.path.expandvars(r'%TEMP%')+"\\onihr\\"+hex(uuid.getnode())+".npy"),FLAG_GEO_VALUE)
         else :
             raise NameError('\033[91m' +"OPEN SETUP FILE"+ '\033[0m')
+    
     return FLAG_GEO_VALUE ,[[RD_TXT_DT_ON_RH[j[0][0]][0]+j[0][1] for j in i] for i in FLAG_GEO_VALUE.tolist()],OBJ_TYPE
 #||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||OBJ ATTRIBUT
 def D_GET_VISUAL_LIST(Adress) :
@@ -536,22 +645,53 @@ def D_CREATE_VISUAL_LIST(VISUAL_FLAG,pm) :
 def D_POINT_2_OBJ_POINT (Point,FLAG) :
     return b''.join([D_TO_BY(i) for i in [FLAG[14][0],0,Point[1].astype(float)]]),np.array((5)),np.array((5))
 def D_PTC_2_OBJ_PTC_CALL (PTC) :
-    return np.cumsum([17]+[i for i in [len(PTC[1][0])*3 if len(PTC[1][c]) !=0 else None for c in range(0,3)] if i is not None])_
-def D_TXT_2_OBJ_TXT_CONT(Text) :
-    return 1
-def D_TXT_2_OBJ_TXT (Text,FLAG,STYLEID) :
-    PROC_D_TXT_2_OBJ_TXT_CONT=executor.submit(D_TXT_2_OBJ_TXT_CONT,Text)
+    return np.cumsum([17]+[i for i in [len(PTC[1][0])*3 if len(PTC[1][c]) !=0 else None for c in range(0,3)] if i is not None])
+def D_TXT_2_OBJ_TXT_CONT(Text,Style_mod_cont) :
+    COUNT = np.cumsum(np.array((111,28.5,math.ceil((len(Text[3])+2)/4)-0.5,5,31.5,1.5+math.ceil((len(Text[3])+2)/2)-2)))
+    COUNT =  np.insert(COUNT,-1,COUNT[1])
+    if np.all(np.isnan(Style_mod_cont)) == False :
+        COUNT =  np.insert(COUNT,1,COUNT[-1])
+        COUNT =  np.insert(COUNT,-1,np.cumsum(Style_mod_cont)+COUNT[-1])[:-1]
+    return COUNT
+def D_TXT_BBOX (Text) :
+    return Text[0]+np.sum((np.tile(np.array(([(Text[d]**2/np.abs(np.sum(Text[d]**2)))**0.5*np.sign(Text[d]) for d in range(1,3)])).flatten(),(2,1))*[[1],[-1]]).reshape(2,2,3),axis=1)
+def D_TXT_2_OBJ_TXT (Text,FLAG,STYLEID,DEFAUT_FONT) :
+    PROC_DUP_MOD_STYLE_DUMP = executor.submit(D_DUP_MOD_STYLE_DUMP,STYLEID,'Default',5)
+    PROC_D_OBJ_NAME = executor.submit(D_OBJ_NAME,Text[3])
+    PROC_D_OBJ_NAME_LONG = executor.submit(D_OBJ_NAME_LONG,Text[3])
+    PROC_D_TXT_BBOX = executor.submit(D_TXT_BBOX,Text)
+    if np.all(np.isnan(Text[7])) ==False : 
+        Style_mod,Style_mod_cont = PROC_DUP_MOD_STYLE_DUMP.result()
+    else :
+        PROC_DUP_MOD_STYLE_DUMP.cancel()
+        Style_mod_cont = np.nan
+    PROC_D_TXT_2_OBJ_TXT_CONT=executor.submit(D_TXT_2_OBJ_TXT_CONT,Text,Style_mod_cont)
     if type(Text[4]) != bytes :
-        if np.nan(Text)[4] :
+        if Text[4] != Text[4] :
             Text[4] = STYLEID[1][0]
         else :
             Text[4] = STYLEID[1][int(Text[4])]
-    Text_bytes,Text_bytes_count = D_OBJ_NAME(Text[3])
-    a = b''.join([D_TO_BY(i) for i in [FLAG[15][1],0,0,Text[4],Text[0],1,np.zeros((3)),Text[1],Text[2],np.cross(Text[1:3]),1,0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',0,0,D_ARRAY_COUNT_MULTI([8,2]),np.zeros((9))]])
-    a = a + b''.join([D_TO_BY(i) for i in [FLAG[15][2],0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',np.zeros((3)),b'\x00\x00\x00\x03\x00\x00\x00\x00',FLAG[15][3],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',D_ARRAY_COUNT_MULTI([4,1]),np.zeros((13)),FLAG[15][4]]])
-    a = a + b''.join([D_TO_BY(i) for i in [D_ARRAY_COUNT(len(Text[3])),Text_bytes]])
+    if np.isnan(Text[5]) or type(Text[5]) != str :
+        Text[5] = DEFAUT_FONT
+    else :
+        ToSolve
+    if  np.size(Text[6])==1 :
+        WRITE_GEOMETRY = b''.join([D_TO_BY(i) for i in [np.zeros((7)),b'\xff\xff\xff\xff\x01\x00\x01\x00',np.array((1,1,0,0,0,0,1,-1,0,1),dtype=np.float64),np.zeros((8))]])
+    else :
+        ToSolve
+    Text_bytes = PROC_D_OBJ_NAME.result()[0]
+    Text_bytes_long = PROC_D_OBJ_NAME_LONG.result()[0]
+    Text_BBOX = PROC_D_TXT_BBOX.result()
+    print(Text[2].astype(float))
+    a = b''.join([D_TO_BY(i) for i in [FLAG[16][1],0,0,Text[4],Text[0].astype(float),Text[1].astype(float),0,Text[2].astype(float),1,np.zeros((2)),np.cross(Text[1],Text[2]).astype(float),1,0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0' if np.all(np.isnan(Text[7])) == False else 0,0,D_ARRAY_COUNT_MULTI([0,8])]])
+    a = a + b''.join([D_TO_BY(i) for i in Text_BBOX]*4) # le truc fait un decaler incomprensible a un moment va savoir pourquoi 
+    a = a + b''.join([D_TO_BY(i) for i in [np.zeros(60),FLAG[16][2],0,b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',np.zeros((3)),b'\x00\x00\x00\x03\x00\x00\x00\x00',FLAG[16][3],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',D_ARRAY_COUNT_MULTI([1,4]),0,Text[5],np.zeros((7)),FLAG[16][4]]])
+    a = a + b''.join([D_TO_BY(i) for i in [D_ARRAY_COUNT_MULTI([len(Text[3]),len(Text[3])]),Text_bytes]])
     a = a + b''.join([D_TO_BY(i) for i in [b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0', np.zeros(4)]])
-    a = a + b''.join([D_TO_BY(i) for i in [FLAG[15][5],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',FLAG[15][6],np.zeros((26))]])
+    a = a + b''.join([D_TO_BY(i) for i in [FLAG[16][5],b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',b'\xf0\xf0\xf0\xf0\xf0\xf0\xf0\xf0',FLAG[16][6],WRITE_GEOMETRY]])
+    a = a + b''.join([D_TO_BY(i) for i in [D_ARRAY_COUNT(len(Text[3])),Text_bytes_long]])   
+    if np.all(np.isnan(Text[7])) == False :
+        a =a+b''.join(Style_mod)
     COUNT = PROC_D_TXT_2_OBJ_TXT_CONT.result()
     return a,COUNT,COUNT[-1]
 def D_PTC_2_OBJ_PTC (PTC,FLAG) :
@@ -807,6 +947,13 @@ def D_OBJ_NAME (NAME) :
         return  p,len(p)
     else :
         return b'',0
+def D_OBJ_NAME_LONG (NAME) :
+    if NAME==NAME : 
+        p = b'\x00\x00\x00\x00'+b''.join([bytes(ctypes.c_wchar(i))+b'\x00\x00' for i in NAME])
+        p = p+b''.join([b'\x00']*(8-len(p)%8))
+        return  p,len(p)
+    else :
+        return b'',0
 def D_CONT_FLAG_ATTRIBUT (OBJECT_ARY_S,SIZE) :
     COUNT = np.tile(np.array((-117,82)),len(OBJECT_ARY_S)).reshape(-1,2)+(np.arange(len(OBJECT_ARY_S))*100)
     COUNT[:,1] = COUNT[:,1] + np.array((SIZE))[:,1]
@@ -832,7 +979,7 @@ def D_OBJ_ATTRIBUT (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Ad
         NUM_LINE = PROC_D_CONT_OBJ_LINE.result()
         if OBJECT_ARY_S[i][0] == 14 : 
             DOMAINE =np.tile(OBJECT_ARY_S[i][1],2).astype(float)
-        elif OBJECT_ARY_S[i][0] ==6 :
+        elif OBJECT_ARY_S[i][0] in [6,16] :
             DOMAINE =np.tile(OBJECT_ARY_S[i][1][0],2).astype(float)
         elif OBJECT_ARY_S[i][0] ==12 :
             DOMAINE = (np.sort(np.array(([j for i in  [[j for i in  [k[:math.floor(len(k))] for k in t] for j in i] for t in (OBJECT_ARY_S[i][1][0]).tolist()] for j in i])).reshape(-1,3),axis=0)[[0,-1]]).astype(float) 
@@ -850,7 +997,7 @@ def D_OBJ_ATTRIBUT (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Ad
     NAME_BYTES_LIST = [k for l in [[NAME_BYTES_LIST[0][i],NAME_BYTES_LIST[1][i]] for i in range(0,len(NAME_BYTES_LIST[0]))] for k in l]
     CONT_FLAG_ATTRIBUT = np.array(D_CONT_FLAG_ATTRIBUT(OBJECT_ARY_S,SIZE)).flatten()
     return OBJ_ATTRIBUT,CONT_FLAG_ATTRIBUT,int(len(OBJ_ATTRIBUT)/8),GUID_LIST_ADD,NAME_BYTES_LIST
-def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID) :
+def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID,DEFAUT_FONT) :
     if i[0] == 9 :
         return D_LINE_2_OBJ_LINE (i[1],FLAG)
     elif i[0] == 10:
@@ -868,14 +1015,15 @@ def D_OBJ_TO_BYTES_SPEED (i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID) :
     elif i[0] == 14 :
         return D_POINT_2_OBJ_POINT (i[1],FLAG,S_SIZE)
     elif i[0] == 16 :
-        return D_TXT_2_OBJ_TXT (i[1],FLAG,STYLEID)
+        return D_TXT_2_OBJ_TXT (i[1],FLAG,STYLEID,DEFAUT_FONT)
 
-def D_OBJ_TO_BYTES (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss, GUID_LIST_ADRSS,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID) :
+def D_OBJ_TO_BYTES (OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss, GUID_LIST_ADRSS,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID,DEFAUT_FONT) :
     CALL_POST,S_SIZE =[],0
     PROC_D_OBJ_ATTRIBUT = executor.submit(D_OBJ_ATTRIBUT,OBJECT_ARY_S,RHN_OBJ_Adrss,p,FLAG,ATTRIBUT_FLAG,RHN_CONST_Adrss,OBJECT_LIST_OFFSET_ATTRIBUT)
     OBJ_GEO_BYTES,SIZE,CONT_FLAG,o = b'',0,[],0
     for i in OBJECT_ARY_S :
-        locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o)] = executor.submit(D_OBJ_TO_BYTES_SPEED,i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID)
+        
+        locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o)] = executor.submit(D_OBJ_TO_BYTES_SPEED,i,FLAG,STD_BYTES_ARRAY,CALL_POST,S_SIZE,STYLEID,DEFAUT_FONT)
         o+=1
     for i in range (0,o) :
         OBJECT,FLAG_OBJ,SIZE_FLAG = locals()["PROC_D_OBJ_TO_BYTES_SPEED" + str(o-1)].result()
@@ -969,6 +1117,7 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
         LINE_TYPE= D_LINE_TYPE(RHN_DOC_Adrss)
         LAYER_TABLE = D_LAYER_TABLE(RHN_DOC_Adrss)
         HATCH_PATTERN = D_HATCH_PATTERN(RHN_DOC_Adrss)
-        STYLEID = D_STYLEID(RHN_DOC_Adrss)
+        STYLEID,DEFAUT_FONT,DEFAUT_FONT_ADRESS = D_STYLEID(RHN_DOC_Adrss)
         OBJECT_ARY_S = [OBJECT_ARY]
-        BYTES  = D_OBJ_TO_BYTES(OBJECT_ARY_S, RHN_OBJ_Adrss,p,OBJECT_LIST_FLAG_BYTES,ATTRIBUT_FLAG_BYTES,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss,GUID_LIST,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID)
+
+        BYTES  = D_OBJ_TO_BYTES(OBJECT_ARY_S, RHN_OBJ_Adrss,p,OBJECT_LIST_FLAG_BYTES,ATTRIBUT_FLAG_BYTES,STD_BYTES_ARRAY,RHN_CONST_Adrss,REDRAW_BIN_Adrss,GUID_LIST,OBJECT_LIST_OFFSET_ATTRIBUT,STYLEID,DEFAUT_FONT)
